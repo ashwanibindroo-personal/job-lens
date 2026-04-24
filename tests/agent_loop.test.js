@@ -92,3 +92,25 @@ test('handles safety-blocked response gracefully', async () => {
   expect(updates.some(u => u.text.includes('blocked'))).toBe(true);
   expect(mockCallGemini).toHaveBeenCalledTimes(1);
 });
+
+test('continues loop and emits warning when executeToolFn throws', async () => {
+  const mockCallGemini = jest.fn()
+    .mockResolvedValueOnce({ candidates: [{ content: { parts: [{ functionCall: { name: 'scrape_page_content', args: {} } }], role: 'model' } }] })
+    .mockResolvedValueOnce({ candidates: [{ content: { parts: [{ text: 'Done despite error.' }], role: 'model' } }] });
+  const mockExecuteTool = jest.fn().mockRejectedValue(new Error('Tab not found'));
+  const updates = [];
+
+  await runAgentLoop({
+    contents: [],
+    tools: [],
+    apiKey: 'key',
+    jobTitle: 'Dev',
+    skills: 'JS',
+    onUpdate: (u) => updates.push(u),
+    callGeminiFn: mockCallGemini,
+    executeToolFn: mockExecuteTool
+  });
+
+  expect(updates.some(u => u.text.includes('Tab not found'))).toBe(true);
+  expect(mockCallGemini).toHaveBeenCalledTimes(2);
+});
