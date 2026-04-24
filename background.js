@@ -73,4 +73,48 @@ async function callGemini(contents, tools, apiKey) {
   return res.json();
 }
 
-if (typeof module !== 'undefined') module.exports = { scoreJobMatch, callGemini };
+async function runAgentLoop({ contents, tools, apiKey, jobTitle, skills, onUpdate, callGeminiFn = callGemini, executeToolFn }) {
+  const MAX_STEPS = 10;
+  const messages = [...contents];
+
+  for (let step = 0; step < MAX_STEPS; step++) {
+    onUpdate({ text: '🤖 Agent thinking...', style: 'thinking' });
+
+    const response = await callGeminiFn(messages, tools, apiKey);
+    const candidate = response.candidates?.[0];
+    if (!candidate) throw new Error('No candidates in Gemini response');
+
+    const parts = candidate.content.parts;
+    messages.push({ role: 'model', parts });
+
+    const functionCallParts = parts.filter(p => p.functionCall);
+
+    if (functionCallParts.length === 0) {
+      const text = parts.map(p => p.text || '').join('');
+      onUpdate({ text: `🧠 ${text}`, style: 'result' });
+      return;
+    }
+
+    const toolResponseParts = [];
+    for (const part of functionCallParts) {
+      const { name, args } = part.functionCall;
+      onUpdate({ text: `🛠 Calling Tool: ${name}...`, style: 'tool' });
+
+      const result = await executeToolFn(name, args, { jobTitle, skills });
+      onUpdate({ text: `✅ Tool executed.`, style: 'success' });
+
+      toolResponseParts.push({
+        functionResponse: {
+          name,
+          response: { result: typeof result === 'string' ? result : JSON.stringify(result) }
+        }
+      });
+    }
+
+    messages.push({ role: 'user', parts: toolResponseParts });
+  }
+
+  onUpdate({ text: '⚠️ Max steps reached', style: 'warning' });
+}
+
+if (typeof module !== 'undefined') module.exports = { scoreJobMatch, callGemini, runAgentLoop };
