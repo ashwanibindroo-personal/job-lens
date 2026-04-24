@@ -50,4 +50,26 @@ function scoreJobMatch({ jobDescription, jobTitle, skills }) {
   return Math.max(1, Math.min(10, Math.round(skillScore + titleScore)));
 }
 
-if (typeof module !== 'undefined') module.exports = { scoreJobMatch };
+async function callGemini(contents, tools, apiKey) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents,
+    tools
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${errText}`);
+  }
+
+  return res.json();
+}
+
+if (typeof module !== 'undefined') module.exports = { scoreJobMatch, callGemini };
