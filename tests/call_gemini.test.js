@@ -31,3 +31,8 @@ test('throws with status code on non-200 response', async () => {
 
   await expect(callGemini([], [], 'bad-key')).rejects.toThrow('Gemini API error 401');
 });
+
+test('propagates network errors from fetch', async () => {
+  global.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+  await expect(callGemini([], [], 'key')).rejects.toThrow('Failed to fetch');
+});

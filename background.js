@@ -51,6 +51,7 @@ function scoreJobMatch({ jobDescription, jobTitle, skills }) {
 }
 
 async function callGemini(contents, tools, apiKey) {
+  if (!apiKey) throw new Error('callGemini: apiKey is required');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
   const body = {
     system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
