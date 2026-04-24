@@ -30,6 +30,21 @@ const GEMINI_TOOLS = [{
   ]
 }];
 
+function scrapePageContent() {
+  return document.body.innerText.slice(0, 8000);
+}
+
+function extractJobLinks() {
+  const keywords = ['job', 'career', 'position', 'role', 'apply', 'opening', 'hiring', 'vacancy'];
+  const links = Array.from(document.querySelectorAll('a'));
+  const matched = links.filter(a => {
+    const href = (a.href || '').toLowerCase();
+    const text = (a.innerText || '').toLowerCase();
+    return keywords.some(kw => href.includes(kw) || text.includes(kw));
+  });
+  return matched.slice(0, 50).map(a => ({ text: a.innerText.trim().slice(0, 100), href: a.href }));
+}
+
 function scoreJobMatch({ jobDescription, jobTitle, skills }) {
   const text = (jobDescription || '').toLowerCase();
   const skillTokens = (skills || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -139,5 +154,81 @@ async function runAgentLoop({ contents, tools, apiKey, jobTitle, skills, onUpdat
 
   onUpdate({ text: '⚠️ Max steps reached', style: 'warning' });
 }
+
+async function chromeExecuteTool(toolName, args, { jobTitle, skills }) {
+  if (toolName === 'scrape_page_content') {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: args._tabId },
+      func: scrapePageContent
+    });
+    return results[0].result;
+  }
+
+  if (toolName === 'extract_job_links') {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: args._tabId },
+      func: extractJobLinks
+    });
+    return results[0].result;
+  }
+
+  if (toolName === 'score_job_match') {
+    return scoreJobMatch({
+      jobDescription: args.jobDescription,
+      jobTitle: args.jobTitle || jobTitle,
+      skills: args.skills || skills
+    });
+  }
+
+  throw new Error(`Unknown tool: ${toolName}`);
+}
+
+let agentTabId = null;
+
+function broadcast(payload) {
+  chrome.runtime.sendMessage(payload).catch(() => {
+    // Popup may be closed — ignore the error
+  });
+}
+
+async function handleStartAgent({ jobTitle, skills, tabId }) {
+  agentTabId = tabId;
+
+  const { apiKey } = await chrome.storage.local.get(['apiKey']);
+  if (!apiKey) {
+    broadcast({ type: 'AGENT_UPDATE', text: '❌ API key not set. Enter it in Settings.', style: 'error' });
+    broadcast({ type: 'AGENT_DONE' });
+    return;
+  }
+
+  const contents = [{
+    role: 'user',
+    parts: [{ text: `Find jobs for: "${jobTitle}". My skills: ${skills || 'not specified'}. Analyze this page and return the top matching job listings with their URLs.` }]
+  }];
+
+  const executeToolFn = (name, args, ctx) =>
+    chromeExecuteTool(name, { ...args, _tabId: agentTabId }, ctx);
+
+  try {
+    await runAgentLoop({
+      contents,
+      tools: GEMINI_TOOLS,
+      apiKey,
+      jobTitle,
+      skills,
+      onUpdate: (u) => broadcast({ type: 'AGENT_UPDATE', ...u }),
+      executeToolFn
+    });
+  } catch (err) {
+    broadcast({ type: 'AGENT_UPDATE', text: `❌ ${err.message}`, style: 'error' });
+  }
+
+  broadcast({ type: 'AGENT_DONE' });
+}
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'START_AGENT') handleStartAgent(msg);
+  // KEEPALIVE messages keep the service worker alive — no action needed
+});
 
 if (typeof module !== 'undefined') module.exports = { scoreJobMatch, callGemini, runAgentLoop };
