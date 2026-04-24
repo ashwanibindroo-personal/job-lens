@@ -161,6 +161,9 @@ async function chromeExecuteTool(toolName, args, { jobTitle, skills }) {
       target: { tabId: args._tabId },
       func: scrapePageContent
     });
+    if (!results || results.length === 0 || results[0] == null) {
+      throw new Error(`executeScript returned no result for tool: ${toolName}`);
+    }
     return results[0].result;
   }
 
@@ -169,6 +172,9 @@ async function chromeExecuteTool(toolName, args, { jobTitle, skills }) {
       target: { tabId: args._tabId },
       func: extractJobLinks
     });
+    if (!results || results.length === 0 || results[0] == null) {
+      throw new Error(`executeScript returned no result for tool: ${toolName}`);
+    }
     return results[0].result;
   }
 
@@ -183,8 +189,6 @@ async function chromeExecuteTool(toolName, args, { jobTitle, skills }) {
   throw new Error(`Unknown tool: ${toolName}`);
 }
 
-let agentTabId = null;
-
 function broadcast(payload) {
   chrome.runtime.sendMessage(payload).catch(() => {
     // Popup may be closed — ignore the error
@@ -192,41 +196,54 @@ function broadcast(payload) {
 }
 
 async function handleStartAgent({ jobTitle, skills, tabId }) {
-  agentTabId = tabId;
-
-  const { apiKey } = await chrome.storage.local.get(['apiKey']);
-  if (!apiKey) {
-    broadcast({ type: 'AGENT_UPDATE', text: '❌ API key not set. Enter it in Settings.', style: 'error' });
+  if (handleStartAgent._running) {
+    broadcast({ type: 'AGENT_UPDATE', text: '⚠️ Agent already running.', style: 'warning' });
     broadcast({ type: 'AGENT_DONE' });
     return;
   }
+  handleStartAgent._running = true;
 
-  const contents = [{
-    role: 'user',
-    parts: [{ text: `Find jobs for: "${jobTitle}". My skills: ${skills || 'not specified'}. Analyze this page and return the top matching job listings with their URLs.` }]
-  }];
-
-  const executeToolFn = (name, args, ctx) =>
-    chromeExecuteTool(name, { ...args, _tabId: agentTabId }, ctx);
+  const capturedTabId = tabId;
 
   try {
-    await runAgentLoop({
-      contents,
-      tools: GEMINI_TOOLS,
-      apiKey,
-      jobTitle,
-      skills,
-      onUpdate: (u) => broadcast({ type: 'AGENT_UPDATE', ...u }),
-      executeToolFn
-    });
-  } catch (err) {
-    broadcast({ type: 'AGENT_UPDATE', text: `❌ ${err.message}`, style: 'error' });
-  }
+    const { apiKey } = await chrome.storage.local.get(['apiKey']);
+    if (!apiKey) {
+      broadcast({ type: 'AGENT_UPDATE', text: '❌ API key not set. Enter it in Settings.', style: 'error' });
+      broadcast({ type: 'AGENT_DONE' });
+      return;
+    }
 
-  broadcast({ type: 'AGENT_DONE' });
+    const contents = [{
+      role: 'user',
+      parts: [{ text: `Find jobs for: "${jobTitle}". My skills: ${skills || 'not specified'}. Analyze this page and return the top matching job listings with their URLs.` }]
+    }];
+
+    const executeToolFn = (name, args, ctx) =>
+      chromeExecuteTool(name, { ...args, _tabId: capturedTabId }, ctx);
+
+    try {
+      await runAgentLoop({
+        contents,
+        tools: GEMINI_TOOLS,
+        apiKey,
+        jobTitle,
+        skills,
+        onUpdate: (u) => broadcast({ type: 'AGENT_UPDATE', ...u }),
+        executeToolFn
+      });
+    } catch (err) {
+      broadcast({ type: 'AGENT_UPDATE', text: `❌ ${err.message}`, style: 'error' });
+    }
+
+    broadcast({ type: 'AGENT_DONE' });
+  } finally {
+    handleStartAgent._running = false;
+  }
 }
+handleStartAgent._running = false;
 
 chrome.runtime.onMessage.addListener((msg) => {
+  // No `return true` needed — responses flow via broadcast(), not sendResponse.
   if (msg.type === 'START_AGENT') handleStartAgent(msg);
   // KEEPALIVE messages keep the service worker alive — no action needed
 });

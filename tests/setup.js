@@ -1,7 +1,7 @@
 global.chrome = {
   storage: {
     local: {
-      get: jest.fn(),
+      get: jest.fn().mockResolvedValue({}),
       set: jest.fn()
     }
   },
