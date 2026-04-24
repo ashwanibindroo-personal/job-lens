@@ -13,7 +13,7 @@ test('POSTs to the correct Gemini endpoint with the API key', async () => {
   await callGemini([{ role: 'user', parts: [{ text: 'test' }] }], [], 'test-api-key');
 
   const [url, options] = global.fetch.mock.calls[0];
-  expect(url).toContain('gemini-2.0-flash');
+  expect(url).toContain('gemini-1.5-flash');
   expect(url).toContain('test-api-key');
   expect(options.method).toBe('POST');
 });

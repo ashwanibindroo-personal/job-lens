@@ -65,9 +65,9 @@ function scoreJobMatch({ jobDescription, jobTitle, skills }) {
   return Math.max(1, Math.min(10, Math.round(skillScore + titleScore)));
 }
 
-async function callGemini(contents, tools, apiKey) {
+async function callGemini(contents, tools, apiKey, retries = 3) {
   if (!apiKey) throw new Error('callGemini: apiKey is required');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   const body = {
     system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents,
@@ -82,6 +82,11 @@ async function callGemini(contents, tools, apiKey) {
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 429 && retries > 0) {
+      const delay = (4 - retries) * 5000;
+      await new Promise(r => setTimeout(r, delay));
+      return callGemini(contents, tools, apiKey, retries - 1);
+    }
     throw new Error(`Gemini API error ${res.status}: ${errText}`);
   }
 
