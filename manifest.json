@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Job Lens",
+  "version": "1.0",
+  "description": "Agentic AI job finder powered by Gemini",
+  "permissions": ["scripting", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" }
+}
