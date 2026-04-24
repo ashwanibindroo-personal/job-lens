@@ -1,8 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Job Lens</title><link rel="stylesheet" href="popup.css"></head>
+<head>
+  <meta charset="UTF-8">
+  <title>Job Lens</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
 <body>
-  <p>Coming soon</p>
+  <div id="app">
+    <div class="header">🔍 Job Lens</div>
+
+    <div class="inputs">
+      <input id="job-title" class="input-field" type="text" placeholder="Job title (e.g. Frontend Developer)">
+      <input id="skills" class="input-field" type="text" placeholder="Skills (e.g. React, TypeScript, CSS)">
+      <button id="start-btn" class="btn-primary">▶ Find Jobs on This Page</button>
+    </div>
+
+    <div id="console" class="console"></div>
+
+    <div class="settings-bar">
+      <span id="settings-toggle" class="settings-link">⚙ Settings</span>
+    </div>
+    <div id="settings-panel" class="settings-panel hidden">
+      <input id="api-key" class="input-field" type="password" placeholder="Gemini API key">
+      <button id="save-key-btn" class="btn-secondary">Save Key</button>
+      <div id="key-status" class="key-status"></div>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
