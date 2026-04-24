@@ -84,15 +84,32 @@ async function runAgentLoop({ contents, tools, apiKey, jobTitle, skills, onUpdat
     const candidate = response.candidates?.[0];
     if (!candidate) throw new Error('No candidates in Gemini response');
 
-    const parts = candidate.content.parts;
+    const content = candidate.content;
+    if (!content?.parts) {
+      onUpdate({ text: '⚠️ Agent response blocked or empty.', style: 'warning' });
+      return;
+    }
+    const parts = content.parts;
+
+    if (parts.length === 0) {
+      onUpdate({ text: '⚠️ Agent returned empty response.', style: 'warning' });
+      return;
+    }
+
     messages.push({ role: 'model', parts });
 
     const functionCallParts = parts.filter(p => p.functionCall);
+    const textParts = parts.filter(p => p.text);
 
     if (functionCallParts.length === 0) {
-      const text = parts.map(p => p.text || '').join('');
+      const text = textParts.map(p => p.text || '').join('');
       onUpdate({ text: `🧠 ${text}`, style: 'result' });
       return;
+    }
+
+    if (textParts.length > 0 && functionCallParts.length > 0) {
+      const reasoningText = textParts.map(p => p.text).join('');
+      onUpdate({ text: `🧠 ${reasoningText}`, style: 'result' });
     }
 
     const toolResponseParts = [];
@@ -100,13 +117,19 @@ async function runAgentLoop({ contents, tools, apiKey, jobTitle, skills, onUpdat
       const { name, args } = part.functionCall;
       onUpdate({ text: `🛠 Calling Tool: ${name}...`, style: 'tool' });
 
-      const result = await executeToolFn(name, args, { jobTitle, skills });
-      onUpdate({ text: `✅ Tool executed.`, style: 'success' });
+      let toolResult;
+      try {
+        toolResult = await executeToolFn(name, args, { jobTitle, skills });
+        onUpdate({ text: `✅ Tool executed.`, style: 'success' });
+      } catch (err) {
+        onUpdate({ text: `⚠️ Tool ${name} failed: ${err.message}`, style: 'warning' });
+        toolResult = { error: err.message };
+      }
 
       toolResponseParts.push({
         functionResponse: {
           name,
-          response: { result: typeof result === 'string' ? result : JSON.stringify(result) }
+          response: { result: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult) }
         }
       });
     }

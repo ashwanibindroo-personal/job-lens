@@ -71,3 +71,24 @@ test('stops after 10 iterations and emits max-steps warning', async () => {
   expect(mockCallGemini).toHaveBeenCalledTimes(10);
   expect(updates.some(u => u.text.includes('Max steps reached'))).toBe(true);
 });
+
+test('handles safety-blocked response gracefully', async () => {
+  const mockCallGemini = jest.fn().mockResolvedValue({
+    candidates: [{ content: null }]
+  });
+  const updates = [];
+
+  await runAgentLoop({
+    contents: [],
+    tools: [],
+    apiKey: 'key',
+    jobTitle: 'Dev',
+    skills: 'JS',
+    onUpdate: (u) => updates.push(u),
+    callGeminiFn: mockCallGemini,
+    executeToolFn: jest.fn()
+  });
+
+  expect(updates.some(u => u.text.includes('blocked'))).toBe(true);
+  expect(mockCallGemini).toHaveBeenCalledTimes(1);
+});
