@@ -31,14 +31,20 @@ const GEMINI_TOOLS = [{
 }];
 
 function scoreJobMatch({ jobDescription, jobTitle, skills }) {
-  const text = jobDescription.toLowerCase();
-  const skillTokens = skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  const titleTokens = jobTitle.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const text = (jobDescription || '').toLowerCase();
+  const skillTokens = (skills || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const titleTokens = (jobTitle || '').toLowerCase().split(/\s+/).filter(w => w.length > 2);
 
-  const skillHits = skillTokens.filter(skill => text.includes(skill)).length;
-  const skillScore = Math.min(skillHits * 2, 6);
+  const skillHits = skillTokens.filter(skill => {
+    const pattern = new RegExp('\\b' + skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+    return pattern.test(text);
+  }).length;
+  const skillScore = Math.min(skillHits * 2, 7);
 
-  const titleHits = titleTokens.filter(word => text.includes(word)).length;
+  const titleHits = titleTokens.filter(word => {
+    const pattern = new RegExp('\\b' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+    return pattern.test(text);
+  }).length;
   const titleScore = Math.min(titleHits * 1.5, 3);
 
   return Math.max(1, Math.min(10, Math.round(skillScore + titleScore)));

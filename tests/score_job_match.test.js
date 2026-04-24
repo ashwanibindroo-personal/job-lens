@@ -38,3 +38,22 @@ test('partial skill match returns mid-range score', () => {
   expect(result).toBeGreaterThanOrEqual(4);
   expect(result).toBeLessThanOrEqual(8);
 });
+
+test('does not count Java as a match for JavaScript skills', () => {
+  const result = scoreJobMatch({
+    jobDescription: 'TypeScript and JavaScript required',
+    jobTitle: 'Developer',
+    skills: 'Java'
+  });
+  // "Java" should NOT match "JavaScript" — score must stay low
+  expect(result).toBeLessThanOrEqual(3);
+});
+
+test('can return a score of 10 for perfect match', () => {
+  const result = scoreJobMatch({
+    jobDescription: 'react typescript css node.js graphql developer position',
+    jobTitle: 'Node.js Developer',
+    skills: 'React, TypeScript, CSS, Node.js, GraphQL, Docker'
+  });
+  expect(result).toBe(10);
+});
