@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Job Lens — Agent Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      color: #e0e0e0;
+    }
+
+    /* ── Animated background grid ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(99,102,241,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,.06) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: gridPan 20s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes gridPan { from { background-position: 0 0; } to { background-position: 40px 40px; } }
+
+    /* ── Title ── */
+    .title-area {
+      text-align: center;
+      margin-bottom: 36px;
+      opacity: 0;
+      animation: fadeUp .8s ease .2s forwards;
+    }
+    .title-area h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #818cf8, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -1px;
+    }
+    .title-area p {
+      margin-top: 8px;
+      color: #6b7280;
+      font-size: .95rem;
+      letter-spacing: .5px;
+    }
+
+    /* ── Stage: browser + popup side by side ── */
+    .stage {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      opacity: 0;
+      animation: fadeUp .8s ease .5s forwards;
+    }
+
+    /* ── Fake browser window ── */
+    .browser {
+      width: 620px;
+      background: #111827;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    .browser-chrome {
+      background: #1f2937;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #374151;
+    }
+    .dots { display: flex; gap: 6px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .dot.red   { background: #ef4444; }
+    .dot.yellow{ background: #f59e0b; }
+    .dot.green { background: #10b981; }
+    .address-bar {
+      flex: 1;
+      background: #374151;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: .78rem;
+      color: #9ca3af;
+      font-family: monospace;
+    }
+    .browser-body {
+      padding: 28px 32px;
+      min-height: 420px;
+    }
+    .page-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #e0e0e0;
+      margin-bottom: 6px;
+    }
+    .page-subtitle { color: #6b7280; font-size: .85rem; margin-bottom: 20px; }
+
+    .job-list { display: flex; flex-direction: column; gap: 12px; }
+    .job-card {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 14px 16px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity .4s, transform .4s, border-color .3s, box-shadow .3s;
+    }
+    .job-card.visible { opacity: 1; transform: none; }
+    .job-card.highlight {
+      border-color: #818cf8;
+      box-shadow: 0 0 14px rgba(129,140,248,.25);
+    }
+    .job-company { font-size: .75rem; color: #6366f1; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .job-role    { font-size: .95rem; color: #e0e0e0; font-weight: 500; margin-top: 2px; }
+    .job-meta    { font-size: .78rem; color: #6b7280; margin-top: 4px; }
+    .job-score {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 10px;
+      background: #1e3a5f;
+      border: 1px solid #3b82f6;
+      border-radius: 20px;
+      font-size: .73rem;
+      color: #93c5fd;
+      opacity: 0;
+      transition: opacity .4s;
+    }
+    .job-score.visible { opacity: 1; }
+
+    /* ── Extension popup ── */
+    .popup {
+      width: 300px;
+      background: #111827;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    .popup-header {
+      background: linear-gradient(135deg, #1e1b4b, #1e3a5f);
+      padding: 14px 16px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #a5b4fc;
+      border-bottom: 1px solid #374151;
+    }
+    .popup-inputs { padding: 12px 14px; border-bottom: 1px solid #1f2937; }
+    .fake-input {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: .8rem;
+      color: #9ca3af;
+      margin-bottom: 8px;
+      width: 100%;
+    }
+    .fake-input.filled { color: #e0e0e0; border-color: #4f46e5; }
+    .run-btn {
+      width: 100%;
+      padding: 9px;
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-weight: 600;
+      font-size: .85rem;
+      cursor: pointer;
+      transition: opacity .3s;
+    }
+    .run-btn:disabled { opacity: .5; cursor: default; }
+
+    /* Console */
+    .console-wrap { padding: 10px 14px; }
+    .console {
+      background: #0d1117;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 10px 12px;
+      height: 280px;
+      overflow-y: auto;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: .73rem;
+      line-height: 1.6;
+    }
+    .console::-webkit-scrollbar { width: 4px; }
+    .console::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+    .log-line {
+      opacity: 0;
+      transform: translateX(-6px);
+      transition: opacity .35s, transform .35s;
+      padding: 1px 0;
+    }
+    .log-line.show { opacity: 1; transform: none; }
+    .log-line.thinking { color: #818cf8; }
+    .log-line.tool     { color: #f59e0b; }
+    .log-line.success  { color: #10b981; }
+    .log-line.result   { color: #60a5fa; }
+    .log-line.warning  { color: #f87171; }
+    .log-line.dim      { color: #4b5563; }
+
+    /* Blinking cursor */
+    .cursor {
+      display: inline-block;
+      width: 7px; height: .85em;
+      background: #818cf8;
+      vertical-align: middle;
+      margin-left: 2px;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Replay button ── */
+    .replay-btn {
+      margin-top: 28px;
+      padding: 10px 28px;
+      background: transparent;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      color: #6b7280;
+      font-size: .85rem;
+      cursor: pointer;
+      transition: color .2s, border-color .2s;
+      opacity: 0;
+      animation: fadeUp .6s ease 0s forwards;
+    }
+    .replay-btn:hover { color: #a5b4fc; border-color: #6366f1; }
+    .replay-btn.shown { opacity: 1 !important; animation: none; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="title-area">
+  <h1>🔍 Job Lens</h1>
+  <p>Agentic AI Chrome Extension — Claude Opus 4.7 powered</p>
+</div>
+
+<div class="stage">
+
+  <!-- Browser -->
+  <div class="browser">
+    <div class="browser-chrome">
+      <div class="dots">
+        <div class="dot red"></div>
+        <div class="dot yellow"></div>
+        <div class="dot green"></div>
+      </div>
+      <div class="address-bar">https://news.ycombinator.com/jobs</div>
+    </div>
+    <div class="browser-body">
+      <div class="page-title">Hacker News — Jobs</div>
+      <div class="page-subtitle">Ask HN: Who is hiring? (May 2025)</div>
+      <div class="job-list">
+        <div class="job-card" id="jc1">
+          <div class="job-company">Stripe</div>
+          <div class="job-role">Senior Software Engineer — Payments Platform</div>
+          <div class="job-meta">Remote · Full-time · $180k–$240k</div>
+          <span class="job-score" id="js1">⭐ Score: 9 / 10</span>
+        </div>
+        <div class="job-card" id="jc2">
+          <div class="job-company">Vercel</div>
+          <div class="job-role">Full Stack Engineer — Developer Experience</div>
+          <div class="job-meta">Remote · Full-time · $160k–$210k</div>
+          <span class="job-score" id="js2">⭐ Score: 8 / 10</span>
+        </div>
+        <div class="job-card" id="jc3">
+          <div class="job-company">Shopify</div>
+          <div class="job-role">Node.js Backend Engineer — Core Infrastructure</div>
+          <div class="job-meta">Remote · Full-time · $155k–$200k</div>
+          <span class="job-score" id="js3">⭐ Score: 7 / 10</span>
+        </div>
+        <div class="job-card" id="jc4">
+          <div class="job-company">Linear</div>
+          <div class="job-role">Frontend Engineer — Product</div>
+          <div class="job-meta">San Francisco · Full-time · $140k–$190k</div>
+          <span class="job-score" id="js4">⭐ Score: 7 / 10</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Extension popup -->
+  <div class="popup">
+    <div class="popup-header">🔍 Job Lens</div>
+    <div class="popup-inputs">
+      <div class="fake-input" id="inp-title">Job title (e.g. Frontend Developer)</div>
+      <div class="fake-input" id="inp-skills">Skills (e.g. React, TypeScript, CSS)</div>
+      <button class="run-btn" id="run-btn" disabled>▶ Find Jobs on This Page</button>
+    </div>
+    <div class="console-wrap">
+      <div class="console" id="console">
+        <span class="cursor"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<button class="replay-btn" id="replay-btn" onclick="replay()">↺ Replay</button>
+
+<script>
+  const LOG_LINES = [
+    { text: 'Starting agent...', cls: 'dim' },
+    { text: '🤖 Agent thinking...', cls: 'thinking' },
+    { text: '🛠 Calling Tool: scrape_page_content...', cls: 'tool' },
+    { text: '✅ Tool executed. Got 6,241 chars of page text.', cls: 'success' },
+    { text: '🤖 Agent thinking...', cls: 'thinking' },
+    { text: '🛠 Calling Tool: extract_job_links...', cls: 'tool' },
+    { text: '✅ Tool executed. Found 23 job-related links.', cls: 'success' },
+    { text: '🤖 Agent thinking...', cls: 'thinking' },
+    { text: '🛠 Calling Tool: score_job_match...', cls: 'tool' },
+    { text: '   jobTitle: "Software Engineer"', cls: 'dim' },
+    { text: '   skills: "JavaScript, React, Node.js"', cls: 'dim' },
+    { text: '✅ Tool executed.', cls: 'success' },
+    { text: '🤖 Agent thinking...', cls: 'thinking' },
+    { text: '🧠 Here are the top matching jobs I found:', cls: 'result' },
+    { text: '   1. Senior Software Engineer – Stripe  (9/10)', cls: 'result' },
+    { text: '   2. Full Stack Engineer – Vercel       (8/10)', cls: 'result' },
+    { text: '   3. Node.js Backend Engineer – Shopify (7/10)', cls: 'result' },
+    { text: '   4. Frontend Engineer – Linear         (7/10)', cls: 'result' },
+    { text: '✅ Agent complete.', cls: 'success' },
+  ];
+
+  // timing (ms after previous line)
+  const DELAYS = [0, 600, 500, 800, 500, 500, 900, 600, 500, 200, 200, 700, 600, 800, 400, 400, 400, 400, 600];
+
+  let timeouts = [];
+
+  function clearAll() {
+    timeouts.forEach(clearTimeout);
+    timeouts = [];
+  }
+
+  function replay() {
+    clearAll();
+    // Reset UI
+    document.getElementById('console').innerHTML = '<span class="cursor"></span>';
+    document.getElementById('inp-title').classList.remove('filled');
+    document.getElementById('inp-skills').classList.remove('filled');
+    document.getElementById('run-btn').disabled = true;
+    ['jc1','jc2','jc3','jc4'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove('visible','highlight');
+    });
+    ['js1','js2','js3','js4'].forEach(id => {
+      document.getElementById(id).classList.remove('visible');
+    });
+    document.getElementById('replay-btn').classList.remove('shown');
+    run();
+  }
+
+  function addLog(text, cls) {
+    const console_ = document.getElementById('console');
+    // Remove cursor temporarily
+    const cursor = console_.querySelector('.cursor');
+    if (cursor) cursor.remove();
+
+    const line = document.createElement('div');
+    line.className = `log-line ${cls}`;
+    line.textContent = text;
+    console_.appendChild(line);
+    // Trigger animation
+    requestAnimationFrame(() => requestAnimationFrame(() => line.classList.add('show')));
+
+    // Re-add cursor
+    const cur = document.createElement('span');
+    cur.className = 'cursor';
+    console_.appendChild(cur);
+
+    // Auto-scroll
+    console_.scrollTop = console_.scrollHeight;
+  }
+
+  function t(fn, ms) {
+    const id = setTimeout(fn, ms);
+    timeouts.push(id);
+    return id;
+  }
+
+  function run() {
+    let elapsed = 0;
+
+    // Step 1: type job title
+    t(() => {
+      document.getElementById('inp-title').textContent = 'Software Engineer';
+      document.getElementById('inp-title').classList.add('filled');
+    }, 800);
+
+    // Step 2: type skills
+    t(() => {
+      document.getElementById('inp-skills').textContent = 'JavaScript, React, Node.js';
+      document.getElementById('inp-skills').classList.add('filled');
+    }, 1600);
+
+    // Step 3: enable + flash button
+    t(() => {
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('run-btn').style.boxShadow = '0 0 20px rgba(99,102,241,.6)';
+    }, 2400);
+    t(() => {
+      document.getElementById('run-btn').style.boxShadow = '';
+    }, 3200);
+
+    // Step 4: show job cards in browser
+    t(() => document.getElementById('jc1').classList.add('visible'), 2000);
+    t(() => document.getElementById('jc2').classList.add('visible'), 2300);
+    t(() => document.getElementById('jc3').classList.add('visible'), 2600);
+    t(() => document.getElementById('jc4').classList.add('visible'), 2900);
+
+    // Step 5: start agent (click)
+    t(() => {
+      document.getElementById('run-btn').disabled = true;
+    }, 3400);
+
+    // Step 6: stream log lines
+    elapsed = 3600;
+    LOG_LINES.forEach((line, i) => {
+      const delay = elapsed + (DELAYS[i] || 400);
+      t(() => addLog(line.text, line.cls), delay);
+      elapsed = delay;
+    });
+
+    // Step 7: highlight scored cards
+    t(() => {
+      document.getElementById('jc1').classList.add('highlight');
+      document.getElementById('js1').classList.add('visible');
+    }, elapsed + 200);
+    t(() => {
+      document.getElementById('jc2').classList.add('highlight');
+      document.getElementById('js2').classList.add('visible');
+    }, elapsed + 500);
+    t(() => {
+      document.getElementById('jc3').classList.add('highlight');
+      document.getElementById('js3').classList.add('visible');
+    }, elapsed + 800);
+    t(() => {
+      document.getElementById('jc4').classList.add('highlight');
+      document.getElementById('js4').classList.add('visible');
+    }, elapsed + 1100);
+
+    // Step 8: show replay
+    t(() => {
+      document.getElementById('replay-btn').classList.add('shown');
+    }, elapsed + 1600);
+  }
+
+  // Auto-start
+  window.addEventListener('load', () => t(run, 400));
+</script>
+</body>
+</html>
