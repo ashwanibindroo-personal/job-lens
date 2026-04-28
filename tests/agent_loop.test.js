@@ -1,36 +1,39 @@
 const { runAgentLoop } = require('../background');
 
 function makeTextResponse(text) {
-  return { candidates: [{ content: { parts: [{ text }], role: 'model' } }] };
+  return { content: [{ type: 'text', text }], stop_reason: 'end_turn' };
 }
 
 function makeToolCallResponse(name, args) {
-  return { candidates: [{ content: { parts: [{ functionCall: { name, args } }], role: 'model' } }] };
+  return {
+    content: [{ type: 'tool_use', id: 'toolu_123', name, input: args }],
+    stop_reason: 'tool_use'
+  };
 }
 
 test('exits on text response and emits result update', async () => {
-  const mockCallGemini = jest.fn().mockResolvedValue(makeTextResponse('Found 3 jobs.'));
+  const mockCallClaude = jest.fn().mockResolvedValue(makeTextResponse('Found 3 jobs.'));
   const mockExecuteTool = jest.fn();
   const updates = [];
 
   await runAgentLoop({
-    contents: [{ role: 'user', parts: [{ text: 'Find jobs' }] }],
+    contents: [{ role: 'user', content: 'Find jobs' }],
     tools: [],
     apiKey: 'key',
     jobTitle: 'Developer',
     skills: 'JS',
     onUpdate: (u) => updates.push(u),
-    callGeminiFn: mockCallGemini,
+    callClaudeFn: mockCallClaude,
     executeToolFn: mockExecuteTool
   });
 
-  expect(mockCallGemini).toHaveBeenCalledTimes(1);
+  expect(mockCallClaude).toHaveBeenCalledTimes(1);
   expect(mockExecuteTool).not.toHaveBeenCalled();
   expect(updates.some(u => u.text.includes('Found 3 jobs'))).toBe(true);
 });
 
 test('executes tool then loops again on tool call response', async () => {
-  const mockCallGemini = jest.fn()
+  const mockCallClaude = jest.fn()
     .mockResolvedValueOnce(makeToolCallResponse('scrape_page_content', {}))
     .mockResolvedValueOnce(makeTextResponse('Done.'));
   const mockExecuteTool = jest.fn().mockResolvedValue('page text content');
@@ -43,17 +46,17 @@ test('executes tool then loops again on tool call response', async () => {
     jobTitle: 'Developer',
     skills: 'JS',
     onUpdate: (u) => updates.push(u),
-    callGeminiFn: mockCallGemini,
+    callClaudeFn: mockCallClaude,
     executeToolFn: mockExecuteTool
   });
 
-  expect(mockCallGemini).toHaveBeenCalledTimes(2);
+  expect(mockCallClaude).toHaveBeenCalledTimes(2);
   expect(mockExecuteTool).toHaveBeenCalledWith('scrape_page_content', {}, expect.any(Object));
   expect(updates.some(u => u.text.includes('scrape_page_content'))).toBe(true);
 });
 
 test('stops after 10 iterations and emits max-steps warning', async () => {
-  const mockCallGemini = jest.fn().mockResolvedValue(makeToolCallResponse('scrape_page_content', {}));
+  const mockCallClaude = jest.fn().mockResolvedValue(makeToolCallResponse('scrape_page_content', {}));
   const mockExecuteTool = jest.fn().mockResolvedValue('result');
   const updates = [];
 
@@ -64,18 +67,16 @@ test('stops after 10 iterations and emits max-steps warning', async () => {
     jobTitle: 'Dev',
     skills: 'JS',
     onUpdate: (u) => updates.push(u),
-    callGeminiFn: mockCallGemini,
+    callClaudeFn: mockCallClaude,
     executeToolFn: mockExecuteTool
   });
 
-  expect(mockCallGemini).toHaveBeenCalledTimes(10);
+  expect(mockCallClaude).toHaveBeenCalledTimes(10);
   expect(updates.some(u => u.text.includes('Max steps reached'))).toBe(true);
 });
 
-test('handles safety-blocked response gracefully', async () => {
-  const mockCallGemini = jest.fn().mockResolvedValue({
-    candidates: [{ content: null }]
-  });
+test('handles empty response gracefully', async () => {
+  const mockCallClaude = jest.fn().mockResolvedValue({ content: [], stop_reason: 'end_turn' });
   const updates = [];
 
   await runAgentLoop({
@@ -85,18 +86,18 @@ test('handles safety-blocked response gracefully', async () => {
     jobTitle: 'Dev',
     skills: 'JS',
     onUpdate: (u) => updates.push(u),
-    callGeminiFn: mockCallGemini,
+    callClaudeFn: mockCallClaude,
     executeToolFn: jest.fn()
   });
 
-  expect(updates.some(u => u.text.includes('blocked'))).toBe(true);
-  expect(mockCallGemini).toHaveBeenCalledTimes(1);
+  expect(updates.some(u => u.text.includes('empty response'))).toBe(true);
+  expect(mockCallClaude).toHaveBeenCalledTimes(1);
 });
 
 test('continues loop and emits warning when executeToolFn throws', async () => {
-  const mockCallGemini = jest.fn()
-    .mockResolvedValueOnce({ candidates: [{ content: { parts: [{ functionCall: { name: 'scrape_page_content', args: {} } }], role: 'model' } }] })
-    .mockResolvedValueOnce({ candidates: [{ content: { parts: [{ text: 'Done despite error.' }], role: 'model' } }] });
+  const mockCallClaude = jest.fn()
+    .mockResolvedValueOnce(makeToolCallResponse('scrape_page_content', {}))
+    .mockResolvedValueOnce(makeTextResponse('Done despite error.'));
   const mockExecuteTool = jest.fn().mockRejectedValue(new Error('Tab not found'));
   const updates = [];
 
@@ -107,10 +108,10 @@ test('continues loop and emits warning when executeToolFn throws', async () => {
     jobTitle: 'Dev',
     skills: 'JS',
     onUpdate: (u) => updates.push(u),
-    callGeminiFn: mockCallGemini,
+    callClaudeFn: mockCallClaude,
     executeToolFn: mockExecuteTool
   });
 
   expect(updates.some(u => u.text.includes('Tab not found'))).toBe(true);
-  expect(mockCallGemini).toHaveBeenCalledTimes(2);
+  expect(mockCallClaude).toHaveBeenCalledTimes(2);
 });
